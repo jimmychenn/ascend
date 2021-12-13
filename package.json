@@ -1,22 +1,18 @@
 {
-  "name": "ascend",
-  "version": "1.0.0",
-  "description": "Ascend take-home",
-  "main": "index.js",
-  "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
-  },
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/jimmychenn/ascend.git"
-  },
-  "author": "Jimmy C",
-  "license": "ISC",
-  "bugs": {
-    "url": "https://github.com/jimmychenn/ascend/issues"
-  },
-  "homepage": "https://github.com/jimmychenn/ascend#readme",
+  "name": "Elastic-Beanstalk-Sample-App",
+  "version": "0.0.1",
+  "private": true,
   "dependencies": {
-    "express": "^4.17.1"
+    "@aws-sdk/client-dynamodb": "^3.44.0",
+    "aws-sdk": "^2.1046.0",
+    "body-parser": "^1.19.1",
+    "ejs": "latest",
+    "express": "^4.17.1",
+    "fs": "0.0.1-security",
+    "node-fetch": "^2.6.6"
+  },
+  "scripts": {
+    "start": "node app.js",
+    "zip": "zip ascend.zip -r * .[^.]*"
   }
 }

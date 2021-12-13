@@ -1,0 +1,22 @@
+{
+  "name": "ascend",
+  "version": "1.0.0",
+  "description": "Ascend take-home",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jimmychenn/ascend.git"
+  },
+  "author": "Jimmy C",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/jimmychenn/ascend/issues"
+  },
+  "homepage": "https://github.com/jimmychenn/ascend#readme",
+  "dependencies": {
+    "express": "^4.17.1"
+  }
+}

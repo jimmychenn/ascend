@@ -2,8 +2,9 @@ const { CreateTableCommand, DynamoDBClient, GetItemCommand, PutItemCommand } = r
 const fs = require('fs')
 const fetch = require('node-fetch')
 
-var express = require('express');
-var bodyParser = require('body-parser')
+const express = require('express');
+const bodyParser = require('body-parser')
+
 
 // var AWS = require('aws-sdk');
 region = process.env.REGION || "local"
@@ -26,9 +27,12 @@ const createTableCommand = new CreateTableCommand({
     }
 });
 
-// TODO: Secure this.
-const API_KEY = 'AIzaSyDnnVyf8Pic48F08DF-sRwYZGnpKVlGX6Y'
-const gmaps_endpoint = 'https://maps.googleapis.com/maps/api/geocode/json'
+const addressCacheClient = require('./src/address_cache_client')
+const addressDdbClient = require('./src/address-ddb-client')
+const gmapsClient = require('./src/gmaps-client')
+
+// Hardcoding this for convenience and testing purposes.
+
 
 
 const mock_data = JSON.parse(fs.readFileSync('address_data.json', 'utf8'));
@@ -75,23 +79,52 @@ app.get('/', function(req, res) {
     res.send('Hello world!')
 });
 
-
-function convertAddressObjectToHashKey(addressObject) {
-    hashKey = `${addressObject.address_line_one}_${addressObject.city}_${addressObject.state}_${addressObject.zip_code}`
-    hashKey = hashKey.replace(/\s/g, '-') // Replace whitespace with '-'
-    return hashKey
+/*
+interface BatchAddressLookupRequest {
+    request: AddressLookupRequest[],
 }
 
-function convertHashKeyToAddressObject(hashKey) {
-    addressDetails = hashKey.replace(/-/g, ' ') // Replace '-' with whitespace
-    addressDetails = addressDetails.split('_')
-    return {
-        address_line_one: addressDetails[0],
-        city: addressDetails[1],
-        state: addressDetails[2],
-        zip_code: addressDetails[3],
-    }
+// A client may optionally pass in latitude or longitude when retrying a batch of requests if some failed due to some retriable failure like a dependency availability issue
+interface AddressLookupRequest {
+    address_line_one: string,
+    city: string,
+    state: string,
+    zip_code: string,
+    latitude?: string,
+    longitude?: string,
 }
+
+interface BatchAddressLookupResponse {
+    response: AddressLookupResponse[],
+}
+interface AddressLookupResponse {
+    body: AddressLookupResponseBody,
+    status: number,
+    errors: string[],
+}
+
+// latitude and longitude keys will always be set in the response but set to undefined if not available
+interface AddressLookupResponseBody {
+    address_line_one: string,
+    city: string,
+    state: string,
+    zip_code: string,
+    latitude: string|undefined,
+    longitude: string|undefined,
+}
+
+Overall flow:
+1. For each address entry, make a read request to the db and transform to response body
+2. For each entry without latitude or longitude, check cache for location data
+3. For each entry without latitude or longitude, make call to gmaps for location data
+
+Error cases:
+1. Input request format is not valid
+2. Address is not found and no location data returned
+3. Address maps to multiple locations
+4. Gmaps is unavailable
+
+*/
 
 function isInvalidRequest(req) {
     if (!Array.isArray(req.body)) {
@@ -113,123 +146,59 @@ function isInvalidRequest(req) {
     }
 }
 
+function createResponse(address, location, status, error) {
+    return {
+        responseBody: {
+            ...address,
+            ...location,
+        },
+        status: status,
+        error: error,
+    }
+}
+
 app.post('/address_lookup', jsonParser, async(req, res) => {
+    res.type('application/json')
+
     if (isInvalidRequest(req)) {
         // console.log(req.body)
         return await res.status('400').send('Invalid request')
     }
-    // addressDetails = req.body.map(convertAddressObjectToHashKey)
-    // console.log(addressDetails)
-    // Convert to DynamoDB requests
 
-    // Perform reads
-    address_items = await Promise.all(req.body.map(async(address) => {
-        const hashKey = convertAddressObjectToHashKey(address)
-        console.log(hashKey)
-        ddbRequest = new GetItemCommand({
-            TableName: ddbTable,
-            Key: {'address_details': {'S': hashKey}},
-        })
-        console.log(ddbRequest)
-        try {
-            address_item = await ddbClient.send(ddbRequest)
-            if (address_item.Item) {
-                // If entry exists
-                return address_item
-            } else {
-                return address
+    addressAndLocations = await Promise.all(
+        req.body.map(async(address) => {
+            location = addressCacheClient.getLocation(address)
+            if (location && location.longitude && location.latitude) {
+                return createResponse(address, location, 200, undefined)
             }
-        } catch (err) {
-            console.error(`Read to DynamoDB for ${ddbRequest} failed with error: ${err}`)
-            return address
-        }
-    }))
-    console.log(`address_items after reads ${JSON.stringify(address_items)}`)
 
-    // For failed requests or addresses not stored in database, fetch location from cache else fetch from gmaps
-    address_items = await Promise.all(address_items.map(async(item) => {
-        if (item.Item === undefined || item.$metadata.httpStatusCode !== 200) {
-            gmapsEndpoint = new URL('https://maps.googleapis.com/maps/api/geocode/json')
-            formattedAddress = `${item.address_line_one}, ${item.city}, ${item.state} ${item.zip_code}`.replace(/\s/g, '+')
-            console.log(formattedAddress)
-            gmapsEndpoint.search = new URLSearchParams([['address', formattedAddress], ['key', API_KEY]])
-            response = await fetch(gmapsEndpoint)
-            responseBody = await response.json()
-            // TODO: Return some client error code if more than one result is returned
-            if (responseBody.results.length === 0) {
-                return {
-                    httpStatusCode: 400,
-                    reason: 'Invalid address: not found'
-                }
-            } else if (responseBody.results.length > 1) {
+            location = await addressDdbClient.getLocation(address)
+            if (location && location.longitude && location.latitude) {
+                return createResponse(address, location, 200, undefined)
+            }
+
+            const locations = await gmapsClient.getLocation(address)
+            if (locations === undefined) {
+                return createResponse(address, location, 424, 'Error fetching Google geocoding API')
+            } else if (locations.length === 0) {
+                return createResponse(address, location, 404, 'Invalid address: not found')
+            } else if (locations.length > 1) {
                 // This should never happen if no empty fields
-                return {
-                    httpStatusCode: 400,
-                    reason: 'Invalid address: ambiguous location'
-                }
+                return createResponse(address, location, 400, 'Invalid address: ambiguous location')
             } else {
-                gpsLocation = responseBody.results[0].geometry.location
-                return {
-                    ...item,
-                    latitude: String(gpsLocation.lat),
-                    longitude: String(gpsLocation.lng),
-                }                
-            }
-        } else if (item.$metadata.httpStatusCode === 200) {
-            return {
-                ...convertHashKeyToAddressObject(item.Item.address_details.S),
-                latitude: item.Item.latitude.S,
-                longitude: item.Item.longitude.S,
+                location = {
+                    latitude: locations[0].lat,
+                    longitude: locations[0].lng,
+                }
+                addressDdbClient.putLocation(address, location)
+                addressCacheClient.putLocation(address, location)
+                return createResponse(address, location, 200, undefined)
             }
         }
-    }))
-
-    console.log(address_items)
-
+    ))
+    console.log(`addressAndLocations after reads ${JSON.stringify(addressAndLocations)}`)
+    res.status(200).send(addressAndLocations)
 })
-
-
-
-// app.post('/signup', function(req, res) {
-//     var item = {
-//         'email': {'S': req.body.email},
-//         'name': {'S': req.body.name},
-//         'preview': {'S': req.body.previewAccess},
-//         'theme': {'S': req.body.theme}
-//     };
-
-//     ddb_client.putItem({
-//         'TableName': ddbTable,
-//         'Item': item,
-//         'Expected': { email: { Exists: false } }        
-//     }, function(err, data) {
-//         if (err) {
-//             var returnStatus = 500;
-
-//             if (err.code === 'ConditionalCheckFailedException') {
-//                 returnStatus = 409;
-//             }
-
-//             res.status(returnStatus).end();
-//             console.log('DDB_client Error: ' + err);
-//         } else {
-//             sns.publish({
-//                 'Message': 'Name: ' + req.body.name + "\r\nEmail: " + req.body.email 
-//                                     + "\r\nPreviewAccess: " + req.body.previewAccess 
-//                                     + "\r\nTheme: " + req.body.theme,
-//                 'Subject': 'New user sign up!!!',
-//                 'TopicArn': snsTopic
-//             }, function(err, data) {
-//                 if (err) {
-//                     res.status(500).end();
-//                     console.log('SNS Error: ' + err);
-//                 } else {
-//                     res.status(201).end();
-//                 }
-//             });            
-//         }
-//     });
-// });
 
 var port = process.env.PORT || 3000;
 

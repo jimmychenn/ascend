@@ -1,9 +1,16 @@
 const { DynamoDBClient, GetItemCommand, PutItemCommand } = require("@aws-sdk/client-dynamodb");
 const addressHasher = require('./address_hasher')
 
-const region = process.env.REGION || "local"
-const endpoint = process.env.ADDRESS_TABLE || "http://localhost:8000"
-const ddbClient = new DynamoDBClient({region, endpoint})
+const region = process.env.AWS_REGION || 'local'
+let config = {region}
+if (region === 'local') {
+    const endpoint = 'http://localhost:8000'
+    config = {
+        ...config,
+        endpoint
+    }    
+}
+const ddbClient = new DynamoDBClient(config)
 const ddbTable =  process.env.ADDRESS_TABLE || 'AddressTable';
 
 exports.getLocation = async (address) => {

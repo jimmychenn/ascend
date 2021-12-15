@@ -1,6 +1,6 @@
 const addressHasher = require('./address_hasher')
 
-const MAX_SIZE = 1000
+const MAX_SIZE = 5
 const cache = {}
 
 exports.putLocation = (address, location) => {

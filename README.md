@@ -78,9 +78,9 @@ I also did not cache address lookup requests that did not result in location dat
 Further, there is an edge case where an existing address is stored in the cache/DB but has since been updated. This can be handled by implementing a TTL on the cache/DB such that rows are deleted after some amount of time.
 
 # Testing
-Before testing, please enter the below URL in a browser and see if it returns a "Hello World!" to check if it is up!
+Before testing, please enter the below URL in a browser and see if it returns a "Hello world!" to check if it is up!
 ```
-http://ascend-env.eba-it9cpady.us-west-2.elasticbeanstalk.com/address_lookup
+http://ascend-env.eba-it9cpady.us-west-2.elasticbeanstalk.com/
 ```
 
 ### Invalid requests
@@ -138,15 +138,18 @@ http://ascend-env.eba-it9cpady.us-west-2.elasticbeanstalk.com/address_lookup
 First take down the Google servers, then send a valid request with a new address and it should return a 424 :)
 
 ### Multiple valid addresses
+```
 curl -X POST -H "Content-Type: application/json" \
 -d '[{"address_line_one": "20 W 34th St", "city": "New York", "state": "NY", "zip_code": "10001"}, {"address_line_one": "410 Terry Ave N", "city": "Seattle", "state": "WA", "zip_code": "98109"}, {"address_line_one": "601 N 34th St", "city": "Seattle", "state": "WA", "zip_code": "98103"}, {"address_line_one": "1600 Amphitheatre Pkwy", "city": "Mountain View", "state": "CA", "zip_code": "94043"}]' \
 http://ascend-env.eba-it9cpady.us-west-2.elasticbeanstalk.com/address_lookup
+```
 
 ### Multiple addresses along with an invalid request and an address with no location
+```
 curl -X POST -H "Content-Type: application/json" \
 -d '[{"address_line_one": "20 W 34th St", "city": "New York", "state": "NY", "zip_code": "10001"}, {"address_line_one": "410 Terry Ave N", "city": "Seattle", "state": "WA", "zip_code": "98109"}, {"address_line_one": "601 N 34th St", "city": "Seattle", "state": "WA", "zip_code": "98103"}, {"address_line_one": "1600 Amphitheatre Pkwy", "city": "Mountain View", "state": "CA", "zip_code": "94043"}, {"address_line_one": "1600 Address Place", "city": "City", "state": "State", "zip_code": "99999"}, {"address_line_one": "1600 Address Place", "city": "City", "state": "", "zip_code": "99999"}]' \
 http://ascend-env.eba-it9cpady.us-west-2.elasticbeanstalk.com/address_lookup
-
+```
 
 ### Infrastructure
 This simple service is a Node service running Express and deployed onto AWS Elastic Beanstalk with a DynamoDB database.

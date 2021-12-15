@@ -16,7 +16,8 @@ Error cases:
 
 ## Validation checks
 * The request body has to be an array.
-* Any address that is missing any of the following fields will be rejected "address_line_one", "city", "state", "zip_code"
+* Any address that is missing any of the following fields will be rejected `address_line_one`, `city`, `state`, `zip_code`
+* If request body includes fields for `latitude` and `longitude` then we do not process this request and return it as is
 
 ## API interface
 The API maintains order between the request address list and the response address list.
@@ -37,7 +38,6 @@ interface BatchAddressLookupRequest {
     request: AddressLookupRequest[],
 }
 
-// A client may optionally pass in latitude or longitude when retrying a batch of requests if some failed due to some retriable failure like a dependency availability issue
 interface AddressLookupRequest {
     address_line_one: string,
     city: string,
@@ -53,13 +53,13 @@ interface AddressLookupRequest {
 interface BatchAddressLookupResponse {
     response: AddressLookupResponse[],
 }
+
 interface AddressLookupResponse {
     responseBody: AddressLookupResponseBody,
     status: number,
     errors: string[],
 }
 
-// latitude and longitude keys will always be set in the response but set to undefined if not available
 interface AddressLookupResponseBody {
     address_line_one: string,
     city: string,
@@ -131,7 +131,7 @@ http://ascend-env.eba-it9cpady.us-west-2.elasticbeanstalk.com/address_lookup
 ```
 curl -X POST -H "Content-Type: application/json" \
 -d '[{"address_line_one": "410 Terry Ave N", "city": "Seattle", "state": "WA", "zip_code": "98109"}]' \
-http://127.0.0.1:3000/address_lookup
+http://ascend-env.eba-it9cpady.us-west-2.elasticbeanstalk.com/address_lookup
 ```
 
 ### Dependency issue
@@ -153,12 +153,17 @@ This simple service is a Node service running Express and deployed onto AWS Elas
 
 I followed this guide to get started: https://docs.aws.amazon.com/elasticbeanstalk/latest/dg/nodejs-dynamodb-tutorial.html?p=gsrc&c=ho_dnwa
 
-Unfortunately custom CNAMEs are not supported out of the box.
+Custom CNAMEs not supported out of the box, unfortunately.
 
 ### Development
-First download DynamoDB Local: https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/DynamoDBLocal.DownloadingAndRunning.html
+Download DynamoDB Local: https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/DynamoDBLocal.DownloadingAndRunning.html
 
-Run
+Run a local DynamoDB instance.
+```
+java -Djava.library.path=./DynamoDBLocal_lib -jar DynamoDBLocal.jar -sharedDb
+```
+
+To start the server
 ```
 npm start
 ```
@@ -168,4 +173,4 @@ Run
 ```
 npm run zip
 ```
-And use the ascend.zip file to upload to AWS Elastic Beanstalk and deploy.
+And use the ascend.zip file that is output to upload to AWS Elastic Beanstalk and deploy.
